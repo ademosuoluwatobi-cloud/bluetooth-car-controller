@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Controller</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            max-width: 500px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4444;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-indicator.connected {
+            background: #44ff44;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .connect-btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 1.1em;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 30px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .connect-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        
+        .connect-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .controls {
+            background: rgba(255,255,255,0.15);
+            padding: 30px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .d-pad {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 30px;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            border: none;
+            border-radius: 15px;
+            font-size: 2em;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.9);
+            color: #667eea;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        
+        .control-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .up-btn { grid-column: 2; grid-row: 1; }
+        .left-btn { grid-column: 1; grid-row: 2; }
+        .stop-btn { 
+            grid-column: 2; 
+            grid-row: 2; 
+            background: #ff4444;
+            color: white;
+        }
+        .right-btn { grid-column: 3; grid-row: 2; }
+        .down-btn { grid-column: 2; grid-row: 3; }
+        
+        .info {
+            text-align: center;
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 20px;
+        }
+        
+        .command-log {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 20px;
+            max-height: 100px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+        
+        .command-log div {
+            padding: 2px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Car Controller</h1>
+        </div>
+        
+        <div class="status">
+            <span class="status-indicator" id="statusIndicator"></span>
+            <span id="statusText">Disconnected</span>
+        </div>
+        
+        <button class="connect-btn" id="connectBtn" onclick="connectBluetooth()">
+            Connect to HC-06
+        </button>
+        
+        <div class="controls">
+            <div class="d-pad">
+                <button class="control-btn up-btn" onclick="sendCommand('U')" disabled id="upBtn">⬆️</button>
+                <button class="control-btn left-btn" onclick="sendCommand('L')" disabled id="leftBtn">⬅️</button>
+                <button class="control-btn stop-btn" onclick="sendCommand('S')" disabled id="stopBtn">STOP</button>
+                <button class="control-btn right-btn" onclick="sendCommand('R')" disabled id="rightBtn">➡️</button>
+                <button class="control-btn down-btn" onclick="sendCommand('D')" disabled id="downBtn">⬇️</button>
+            </div>
+            
+            <div class="info">
+                Press and hold buttons to control your car
+            </div>
+            
+            <div class="command-log" id="commandLog"></div>
+        </div>
+    </div>
+    
+    <script>
+        let bluetoothDevice;
+        let characteristic;
+        let isConnected = false;
+        
+        async function connectBluetooth() {
+            try {
+                const connectBtn = document.getElementById('connectBtn');
+                connectBtn.disabled = true;
+                connectBtn.textContent = 'Connecting...';
+                
+                // Request Bluetooth device
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { name: 'HC-06' },
+                        { namePrefix: 'HC-' }
+                    ],
+                    optionalServices: ['0000ffe0-0000-1000-8000-00805f9b34fb']
+                });
+                
+                // Connect to GATT server
+                const server = await bluetoothDevice.gatt.connect();
+                
+                // Get service and characteristic
+                const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                
+                isConnected = true;
+                updateConnectionStatus(true);
+                enableControls(true);
+                logCommand('Connected to HC-06!');
+                
+                connectBtn.textContent = 'Disconnect';
+                connectBtn.disabled = false;
+                connectBtn.onclick = disconnectBluetooth;
+                
+            } catch (error) {
+                console.error('Connection failed:', error);
+                logCommand('Connection failed: ' + error.message);
+                document.getElementById('connectBtn').disabled = false;
+                document.getElementById('connectBtn').textContent = 'Connect to HC-06';
+                alert('Connection failed! Make sure:\n1. Bluetooth is enabled\n2. HC-06 is powered on\n3. Device is paired (PIN: 123456)');
+            }
+        }
+        
+        function disconnectBluetooth() {
+            if (bluetoothDevice && bluetoothDevice.gatt.connected) {
+                bluetoothDevice.gatt.disconnect();
+            }
+            isConnected = false;
+            updateConnectionStatus(false);
+            enableControls(false);
+            
+            const connectBtn = document.getElementById('connectBtn');
+            connectBtn.textContent = 'Connect to HC-06';
+            connectBtn.onclick = connectBluetooth;
+            logCommand('Disconnected');
+        }
+        
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            if (connected) {
+                indicator.classList.add('connected');
+                statusText.textContent = 'Connected to HC-06';
+            } else {
+                indicator.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+            }
+        }
+        
+        function enableControls(enabled) {
+            const buttons = ['upBtn', 'downBtn', 'leftBtn', 'rightBtn', 'stopBtn'];
+            buttons.forEach(id => {
+                document.getElementById(id).disabled = !enabled;
+            });
+        }
+        
+        async function sendCommand(command) {
+            if (!isConnected || !characteristic) {
+                alert('Please connect to HC-06 first!');
+                return;
+            }
+            
+            try {
+                const encoder = new TextEncoder();
+                await characteristic.writeValue(encoder.encode(command));
+                logCommand('Sent: ' + getCommandName(command));
+            } catch (error) {
+                console.error('Send failed:', error);
+                logCommand('Error: ' + error.message);
+            }
+        }
+        
+        function getCommandName(command) {
+            const names = {
+                'U': '⬆️ Forward',
+                'D': '⬇️ Backward',
+                'L': '⬅️ Left',
+                'R': '➡️ Right',
+                'S': '🛑 Stop'
+            };
+            return names[command] || command;
+        }
+        
+        function logCommand(message) {
+            const log = document.getElementById('commandLog');
+            const entry = document.createElement('div');
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep only last 10 entries
+            while (log.children.length > 10) {
+                log.removeChild(log.lastChild);
+            }
+        }
+        
+        // Add keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (!isConnected) return;
+            
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                    sendCommand('U');
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    sendCommand('D');
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    sendCommand('L');
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    sendCommand('R');
+                    break;
+                case ' ':
+                    sendCommand('S');
+                    e.preventDefault();
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>
